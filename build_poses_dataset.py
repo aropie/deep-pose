@@ -1,15 +1,13 @@
-#!/usr/bin/env python
-import theano
-import random
+#!/usr/bin/env python3
 import pickle
 import argparse
 import numpy as np
-import sys
 import os
 
 WORK_DIR = "/home/marciniega/Things_Dock/Proyecto/clean_start"
 POSES_DIR = WORK_DIR+"/poses"
 OBJ_DIR = WORK_DIR+"/working_objects"
+
 
 def create_branch_dict(branches_file):
     f = open(branches_file)
@@ -44,11 +42,10 @@ def create_pose_matrix(branch_dict, branches_file):
         for line in f:
             if len(line.split(",")) <= 1:
                 if len(branches) == 0:
-                    #sys.stderr.write("Archivo con rama sin vecinos -> " + branches_file + "\n")
-                    #return []
-                    empty_signal_br = [ m for i in range(5) ]
-                    empty_signal_ds = encode_distances([6.0,6.0,6.0,6.0,6.0])
-                    pose.append(np.array( [empty_signal_br,empty_signal_ds]))
+                    empty_signal_br = [m for i in range(5)]
+                    empty_signal_ds = encode_distances([6.0, 6.0, 6.0,
+                                                        6.0, 6.0])
+                    pose.append(np.array([empty_signal_br, empty_signal_ds]))
                 elif len(branches) >= 5:
                     sorted_branches = sorted(branches, key=lambda b: b[0])
                     close_distances, close_branches = zip(*sorted_branches[:5])
@@ -77,7 +74,7 @@ def file_len(fname):
 
 def create_dataset(branch_dict, filename):
     print "Processing {}...".format(filename)
-    logfile = open('not_done.txt','w')
+    logfile = open('not_done.txt', 'w')
     with open(filename, "rb") as f:
         total = file_len(filename)
         current = 1
@@ -86,7 +83,8 @@ def create_dataset(branch_dict, filename):
         for line in f:
             current_file, pose, rmsdi, score = line.split()
             if current % 1000 == 0:
-                print "{}_{} -> {}/{}".format(current_file, pose, current, total)
+                print "{}_{} -> {}/{}".format(current_file, pose,
+                                              current, total)
             rmsdi = float(rmsdi)
 
             if rmsdi <= 3:
@@ -96,7 +94,8 @@ def create_dataset(branch_dict, filename):
 
             label = i
 
-            pose = "{}/{}/{}_{}".format(POSES_DIR,current_file.split(".")[0], pose, current_file)
+            pose = "{}/{}/{}_{}".format(POSES_DIR, current_file.split(".")[0],
+                                        pose, current_file)
 
             if os.path.isfile(pose) and float(rmsdi) >= 0:
                 pose_matrix = create_pose_matrix(branch_dict, pose)
@@ -119,13 +118,12 @@ def main():
 
     dataset_txt = args.p
     basename = dataset_txt.split('/')[-1].split('.')[0]
-    
 
     branch_dict = create_branch_dict(args.d)
     dataset = create_dataset(branch_dict, dataset_txt)
 
     print("{} poses generated".format(len(dataset)))
-    with open( OBJ_DIR + '/' + basename + ".pkl", "wb") as f:
+    with open(OBJ_DIR + '/' + basename + ".pkl", "wb") as f:
         pickle.dump(dataset, f)
 
 

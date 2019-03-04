@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-import sys
 import cPickle as pickle
-import os
 
 LIST_DIR = "/home/marciniega/Things_Dock/Proyecto/clean_start/working_lists"
+
 
 def split_info(line):
     r_name = line[:3]
@@ -11,6 +10,7 @@ def split_info(line):
     atms = line[26:67].strip().split(",")
     atm_type = line[67:].strip().split(",")
     return (r_name, smi, atms, atm_type)
+
 
 def createDictionary(dic):
     dictionary = {}
@@ -25,5 +25,6 @@ def createDictionary(dic):
                 "atms": atms
                 }))
     pickle.dump(dictionary, open("resi_branch_dict.pkl", "wb"))
+
 
 createDictionary('LIST_DIR/filtered_branches_dict_list.txt')
