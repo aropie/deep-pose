@@ -1,0 +1,599 @@
+import numpy as np
+from itertools import imap
+
+class Atom(object):
+      def __init__(self, name, coord, rfact, atom_number, occup, element,rfact_std=None):
+          self.name = name
+          self.coord = np.array(coord)
+          self.rfact = float(rfact)
+          self.atom_number = int(atom_number)
+          self.occup = occup
+          self.element = element
+          self.rfact_std = rfact_std
+
+      def print_info(self):
+          coord_print = '%7.2f %7.2f %7.2f'%(self.coord[0],self.coord[1],self.coord[2])
+          print '%4s %s %3s %s'%(self.resi,self.resn,self.name,coord_print)   
+
+class Residue(object):
+      "store residue info"              
+      def __init__(self, resi, resn, chain ,atomnames=None):
+          self.resi = int(resi)
+          self.resn = resn
+          self.chain = chain
+          if atomnames is None:
+             self.atomnames = []
+
+      def __iter__(self):
+          return self
+
+      def next(self): # Python 3: def __next__(self)
+          if self.current > self.end:
+             raise StopIteration
+          else:
+             self.current += 1
+             return self.atomnames[self.current - 1]
+
+      def ResetAtomIter( self , start = 0):
+          self.current = start
+   
+      def PrintResSumary(self):
+          print 'Resi %4s Resn  %4s Chain %2s No.AToms  %2s'\
+                %(self.resi,self.resn,self.chain,self.atomwithin)
+
+      def add_atom(self, name, coords, rfact, atom_number, occup, element,rfact_std=None):
+          if rfact_std is None:
+             setattr(self, name,  Atom(name,coords,rfact, atom_number, occup , element))
+          else:
+             setattr(self, name,  Atom(name,coords,rfact, atom_number, occup , element,rfact_std))
+          self.atomnames.append(name)
+          self.atomwithin = len(self.atomnames)
+          self.current = 0
+          self.end = self.atomwithin
+
+      def GetMainChainCoord(self):
+          return np.array([self.N.coord,self.CA.coord,self.C.coord])
+
+      def SetDihe(self,phi,psi):
+          setattr(self,'phi', float(phi))
+          setattr(self,'psi', float(psi))
+
+      def UpDateValue(self,property_to_change,value):
+          for atom_in_res in self.atomnames:
+              current_atom = getattr(self,atom_in_res) 
+              setattr(current_atom,property_to_change, float(value))
+
+      def UpDateName(self,property_to_change,new_name):
+          setattr(self, property_to_change, new_name)
+            
+
+
+class PdbStruct(object):
+      def __init__(self,name,pdbdata=None,timefrm=None):
+          self.name = name
+          if pdbdata is None:
+             self.pdbdata = []
+          self.timefrm = timefrm        
+
+      def __iter__(self):
+          return self
+
+      def next(self): # Python 3: def __next__(self)
+          if self.current > self.end:
+             raise StopIteration
+          else:
+             self.current += 1
+             return self.pdbdata[self.current - 1]
+
+      def ResetResIter( self , start = 0):
+          self.current = start
+
+      def AddPdbData(self,pdb_name):
+          if type(pdb_name) is str: 
+             data_pdb = open('%s'%pdb_name,'r').readlines()
+          else: # it is already read
+             data_pdb = pdb_name
+          data = self.pdbdata 
+          tmp_resi = None
+          res_count = -1
+          atn_count = 0
+          for line in data_pdb:
+              if line[:4] == 'ATOM':
+                 atn_count += 1
+                 line = line.split('\n')[0]
+                 coord = [float(line[30:38]),float(line[38:46]),float(line[46:54])]
+                 r_fact = float(line[60:66])
+                 chain = "".join(line[20:22].split())
+                 occup = float("".join(line[57:61].split())) 
+                 if line[21]==' ':
+                    flag_no_chain = True
+                 else:
+                    flag_no_chain = False
+                 line = line.split()
+                 aton = line[2]
+                 resn = line[3]
+                 if flag_no_chain:
+                    resi = line[4]
+                 else:
+                    resi = line[5]
+                 element = line[-1]
+                 if not resi == tmp_resi:
+                    res_count += 1
+                    data.append(Residue(resi,resn,chain))
+                    tmp_resi = resi
+                    residue = data[res_count]
+                 residue.add_atom(aton,coord,r_fact,atn_count,occup,element)
+          self.seqlength = len(data)
+          self.current = 0
+          self.end = self.seqlength
+
+      def PrintPdbInfo(self):
+          print "Number of residues and frame: %s    %s" %(self.seqlength ,self.timefrm)
+
+      def GetSeqInd(self):
+          return [ int(i.resi) for i in self.pdbdata ]
+
+      def GetResSeq(self):
+          return [ i.resn for i in self.pdbdata ]
+
+      def GetRes(self, idx):
+          return [ res for res in self.pdbdata if int(res.resi) == idx ][0]
+
+      def GetSeqRfact(self,atoms_to_consider=None):
+          """ Return an array of the B-factors, each residue has an assingment.
+              The assigned value corresponds to the average of B-factors of the 
+              considered atoms. The option atoms_to_consider take an array of atom name
+              to consider in the assigment. Default is consider all atoms in residue"""
+
+          #def check_list_of_atoms(res,atoms_list):
+          #    atnames=''
+          #    if atoms_list is None: # consider all the atoms
+          #       atnames = res.atomnames
+          #    elif type(atoms_list) is list: # check if a list is given
+          #       atnames = atoms_list
+          #    else:
+          #      raise ListCheckError("The atoms_to_consider should be given as a list")
+          #    return atnames
+
+          data = []
+          for res in self.pdbdata:
+              res_rfact = 0
+              atom_names = check_list_of_atoms(res,atoms_to_consider)
+              for atm in atom_names:
+                  if hasattr(res, atm):
+                     atom_ob = getattr(res,atm)
+                     res_rfact += atom_ob.rfact
+                  else:
+                      raise NoAtomInResidueError("The residue %s%s in structure %s does not have atom %s"%(res.resi,res.resn,self.name,atm))
+              data.append(res_rfact/float(len(atom_names)))
+          return data
+
+      def GetAtomPos(self,atoms_to_consider='CA', setofinterest=None):
+          """ Return an array with the coordinates of the requested main chain atoms.
+              Default is consider the c-alpha atom and all the residues"""
+          # checking atom name
+          if atoms_to_consider in ['N','CA','C','O']:
+             pass
+          else:
+             raise NoValidAtomNameError
+      
+          # checking which residues
+          try:
+             assert not isinstance(setofinterest, basestring) # checking no string
+          except:
+             raise SystemExit("Input should be a list (the residues of interest)")
+
+          if setofinterest == None:
+             indexes = self.GetSeqInd()
+          else:
+             indexes = [ int(i) for i in setofinterest ]
+
+          data = []
+          atm = atoms_to_consider
+          for idx in indexes:
+              res = self.GetRes(idx)
+              if hasattr(res, atm):
+                 atom_ob = getattr(res,atm)
+                 atom_pos = np.array(atom_ob.coord)
+              else:
+                 raise NoAtomInResidueError("The residue %s%s in structure %s does not have atom %s"%(res.resi,res.resn,self.name,atm))
+              data.append(atom_pos)
+          return np.array(data)
+
+      def GetDiheMain(self):
+          data = []  
+          for index in [ int(i.resi) for i in self.pdbdata ][1:-1]:  
+              res = self.GetRes(index)
+              data.append(np.array([res.phi,res.psi]))
+          return data 
+
+      def SetDiheMain(self):  
+          """ Assign the phi and psi angles residues in the molecule"""
+          for index in [ int(i.resi) for i in self.pdbdata ][1:-1]:
+              res_pre = self.GetRes(index-1)
+              res = self.GetRes(index)
+              res_nex = self.GetRes(index+1)
+              phi = dihedral(getattr(res_pre,'C').coord,getattr(res,'N').coord,getattr(res,'CA').coord,getattr(res,'C').coord)
+              psi = dihedral(getattr(res,'N').coord,getattr(res,'CA').coord,getattr(res,'C').coord,getattr(res_nex,'N').coord)
+              self.GetRes(index).SetDihe(phi-180,psi-180)
+
+      def SetRfactor(self , new_data):
+          """ Asign external values to a pdb. Specific to put the new value in the B-factor value of the CA.
+              DOTO: make it more general, to each atom??? """
+          sequence = self.GetSeqInd()
+          if not len(sequence) == len(new_data):
+             raise NoSameLengthError(\
+                        "The current structure has %s residues and data that you want to assign has %s !!!"%(len(sequence), len(new_data)))
+          c = 0
+          for index in sequence:
+              self.GetRes(index).UpDateValue('rfact',new_data[c])                               
+              c += 1
+
+      def RenameResidues(self, list_of_new_names):
+          """ This just change the name, thus atom types remain."""
+          if len(self.pdbdata) == len(list_of_new_names):
+             pass
+          else:
+             raise SystemExit("The give list does not have the same size as the sequence")
+          c = 0
+          for res in self.pdbdata:
+              res.UpDateName('resn',list_of_new_names[c])
+              c += 1
+
+
+      def WriteToFile(self,file_out_name=None):
+          """ Write a structre back to a pdb file.
+          Example of line:
+          0         1         2         3         4         5         6         7         
+          01234567890123456789012345678901234567890123456789012345678901234567890123456789
+          ATOM   1855  C   GLU D 250     -16.312 -74.893  -0.456  1.00133.59           C
+          """
+          if file_out_name is None:
+             file_out_name = self.name
+          out_data = open('%s.pdb'%file_out_name,'w')
+          out_data.write("REMARK %s writen by me. \n"%self.name)
+          #for index in [ int(i.resi) for i in self.pdbdata ][1:-1]:
+          for index in [ int(i.resi) for i in self.pdbdata ]:
+              res = self.GetRes(index)
+              for atn in res.atomnames:
+                  atom = getattr(res,atn)
+                  line = "ATOM"
+                  line += "%7s"%atom.atom_number
+                  line += "%3s"%atn
+                  line += "%6s"%res.resn
+                  line += "%2s"%res.chain
+                  line += "%4s"%res.resi
+                  line += "    "
+                  line += "%8.3f"%atom.coord[0]
+                  line += "%8.3f"%atom.coord[1]
+                  line += "%8.3f"%atom.coord[2]
+                  line += "%6.2f"%atom.occup
+                  line += "%6.2f"%atom.rfact
+                  line += "           "
+                  line += "%-3s"%atom.element 
+                  out_data.write("%s\n"%line)
+          out_data.write("END")   
+
+class Trajectory(object):
+      """Handles trajectory files. My trajectory file format. """
+      def __init__(self, name, frames=None, length=None):
+          self.name = name
+          if frames is None:
+             self.frames = []
+             self.length = length
+
+      def __iter__(self):
+          return self
+
+      def next(self): # Python 3: def __next__(self)
+          if self.current > self.end:
+             raise StopIteration
+             
+          else:
+             self.current += 1
+             return self.frames[self.current - 1]
+
+      def ResetIter( self , start = 0):
+          self.current = start          
+
+      def ReadTraj(self,file_to_read,every=1):
+          fr = 0
+          exfr = 0
+          sav_fr = True
+          #traj_file = open(file_to_read,'r').readlines()
+          with open(file_to_read) as traj_file:
+               for line in traj_file:
+                   if line[:5] == "MODEL":
+                      if exfr == 0:
+                         sav_fr = True
+                         frame = []
+                      
+                   elif line[:6] == "ENDMDL":
+                      exfr += 1
+                      sav_fr = False
+                      if exfr == every:
+                         fr += 1
+                         temp = PdbStruct('frame_%s'%fr,timefrm=fr)
+                         temp.AddPdbData(frame)
+                         #temp.PrintPDBSumary()
+                         self.frames.append(temp)
+                         exfr = 0
+                   else:
+                      if sav_fr:
+                         frame.append(line)     
+               self.length = len(self.frames) # Ready
+               self.current = 0               # for 
+               self.end = self.length         # iterations
+
+          #for line in traj_file:
+          #    if line[:5] == "MODEL":
+          #       frame = []
+          #    elif line[:6] == "ENDMDL":
+          #       temp = PdbStruct('frame_%s'%fr)
+          #       temp.AddPdbData(frame)
+          #       self.frames.append(temp)
+          #       fr += 1
+          #    else:
+          #       frame.append(line)     
+
+      def PrintTrajInfo(self):
+          print 'This trajectory file : %s'%self.name
+          print 'has %s frames'%self.length
+
+      def GetFrame(self,frame):
+          return self.frames[frame]
+
+      
+      #def IterFrames(self,intial=None,final=None):
+      #    if initial == None:
+      #       initial = 0
+      #    if final == None:
+      #       final = self.length
+      #    imap(PrintPDBSumary())
+
+      def GetAverageStruct(self,set_frames=None):
+          if set_frames is None:
+             set_frames = range(len(self.frames))
+          elif not type(set_frames) is list:
+             raise ListCheckError("The set_frame should be given as a list of frames to average")
+
+          temp_pdb = PdbStruct('average') 
+          data = temp_pdb.pdbdata
+          res_count = 0 
+          atn_count = 0
+          store_dist_data = {}
+          for j in set_frames:
+              b_fact_data = self.frames[j].GetSeqRfact(['N','CA','C'])
+              store_dist_data[j] = (np.average(b_fact_data),np.std(b_fact_data))
+
+          for index in self.frames[0].GetSeqInd():
+              temp_ob = self.frames[0].GetRes(index)
+              resi = temp_ob.resi
+              resn = temp_ob.resn
+              chain = temp_ob.chain
+              data.append(Residue(resi,resn,chain))
+              residue = data[res_count]
+              for atn in ['N','CA','C']:
+                  atn_count += 1 
+                  temp_coor = []
+                  temp_rfact = []
+                  for i in set_frames:
+                      fr = self.frames[i]
+                      res = fr.GetRes(index)
+                      atom = getattr(res,atn)
+                      temp_coor.append(getattr(atom,'coord'))
+                      temp_rfact.append((getattr(atom,'rfact') - store_dist_data[i][0])/store_dist_data[i][1])
+                      #temp_rfact.append((getattr(atom,'rfact')))
+                  ave_coor = np.average(np.array(temp_coor),axis=0)
+                  std_coor = np.std(np.array(temp_coor),axis=0)
+                  std_coor = np.sqrt(np.sum([ i*i for i in std_coor ]))
+                  element = atn[0]
+                  bf_ave = np.average(temp_rfact)
+                  bf_std = np.std(temp_rfact)
+                  residue.add_atom(atn,ave_coor,bf_ave,atn_count,std_coor,element,bf_std)
+              res_count += 1 
+          self.average = temp_pdb 
+
+class Resi_plot(object):
+      "store residue info"              
+      def __init__(self, resi, resn, diff):
+           self.resi = int(resi)
+           self.resn = resn
+           self.diff = diff
+
+class NoSameLengthError(Exception):pass
+class DihedralGeometryError(Exception): pass
+class AngleGeometryError(Exception): pass
+class NoValidAtomNameError(Exception): pass
+class ListCheckError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+    def __str__(self):
+        return self.msg
+class NoAtomInResidueError(Exception):
+      def __init__(self, msg):
+          self.msg = msg
+      def __str__(self):
+          return self.msg
+
+def check_list_of_atoms(res,atoms_list):
+    atnames=''
+    if atoms_list is None: # consider all the atoms
+       atnames = res.atomnames
+    elif type(atoms_list) is list: # check if a list is given
+       atnames = atoms_list
+    else:
+      raise ListCheckError("The atoms_to_consider should be given as a list")
+    return atnames
+
+
+def scalar(v1,v2):
+    """
+    calculates the scalar product of two vectors
+    v1 and v2 are numpy.array objects.
+    returns a float for a one-dimensional array.
+    """
+    return sum(v1*v2)
+
+def angle(v1,v2):
+    """
+    calculates the angle between two vectors.
+    v1 and v2 are numpy.array objects.
+    returns a float containing the angle in radians.
+    """
+    length_product = np.linalg.norm(v1)*np.linalg.norm(v2)
+    if length_product == 0:
+        raise AngleGeometryError(\
+        "Cannot calculate angle for vectors with length zero")
+    cosine = scalar(v1,v2)/length_product
+    angle = np.arccos(cosine)
+    return angle 
+
+def calc_angle(vec1,vec2,vec3):
+    """Calculates a flat angle from three coordinates."""
+    if len(vec1) == 3:
+        v1, v2, v3 = map(create_vector,[vec1,vec2,vec3])
+    else:
+        v1, v2, v3 = map(create_vector2d,[vec1,vec2,vec3])
+    v12 = v2 - v1
+    v23 = v2 - v3
+    return angle(v12, v23)
+
+def create_vector2d(vec):
+    """Returns a vector as a numpy array."""
+    return np.array([vec[0],vec[1]])
+    
+def create_vector(vec):
+    """Returns a vector as a numpy array."""
+    return np.array([vec[0],vec[1],vec[2]])
+    
+def create_vectors(vec1,vec2,vec3,vec4):
+    """Returns dihedral angle, takes four
+    Scientific.Geometry.Vector objects
+    (dihedral does not work for them because
+    the Win and Linux libraries are not identical.
+    """
+    return map(create_vector,[vec1,vec2,vec3,vec4])
+
+def distance(coor1,coor2):
+    """Returns the distance between two vectors """
+    val = (coor1[0]-coor2[0])*(coor1[0]-coor2[0]) + (coor1[1]-coor2[1])*(coor1[1]-coor2[1]) + (coor1[2]-coor2[2])*(coor1[2]-coor2[2])
+    return np.sqrt(val)
+
+def dihedral(vec1,vec2,vec3,vec4):
+    """
+    Returns a float value for the dihedral angle between
+    the four vectors. They define the bond for which the
+    torsion is calculated (~) as:
+    V1 - V2 ~ V3 - V4
+    The vectors vec1 .. vec4 can be array objects, lists or tuples of length
+    three containing floats.
+    For Scientific.geometry.Vector objects the behavior is different
+    on Windows and Linux. Therefore, the latter is not a featured input type
+    even though it may work.
+    If the dihedral angle cant be calculated (because vectors are collinear),
+    the function raises a DihedralGeometryError
+    """
+    # create array instances.
+    v1,v2,v3,v4 = create_vectors(vec1,vec2,vec3,vec4)
+    all_vecs = [v1,v2,v3,v4]
+
+    # rule out that two of the atoms are identical
+    # except the first and last, which may be.
+    for i in range(len(all_vecs)-1):
+        for j in range(i+1,len(all_vecs)):
+            if i>0 or j<3: # exclude the (1,4) pair
+                equals = all_vecs[i]==all_vecs[j]
+                if equals.all():
+                    raise DihedralGeometryError(\
+                        "Vectors #%i and #%i may not be identical!"%(i,j))
+
+    # calculate vectors representing bonds
+    v12 = v2-v1
+    v23 = v3-v2
+    v34 = v4-v3
+
+    # calculate vectors perpendicular to the bonds
+    normal1 = np.cross(v12,v23)
+    normal2 = np.cross(v23,v34)
+
+    # check for linearity
+    if np.linalg.norm(normal1) == 0 or np.linalg.norm(normal2)== 0:
+        raise DihedralGeometryError(\
+            "Vectors are in one line; cannot calculate normals!")
+
+    # normalize them to length 1.0
+    normal1 = normal1/np.linalg.norm(normal1)
+    normal2 = normal2/np.linalg.norm(normal2)
+
+    # calculate torsion and convert to degrees
+    torsion = angle(normal1,normal2) * 180.0/np.pi
+
+    # take into account the determinant
+    # (the determinant is a scalar value distinguishing
+    # between clockwise and counter-clockwise torsion.
+    if scalar(normal1,v34) >= 0:
+        return torsion
+    else:
+        torsion = 360-torsion
+        if torsion == 360: torsion = 0.0
+        return torsion
+
+def compute_distance(ref,tar,atom_name):
+    plot_data = []
+    for i in range(len(tar)): # same size
+        tar_res = tar[i]
+        ref_res = ref[i]
+        #print ref_res.CA.coord
+        plot_data.append(Resi_plot(tar_res.resi,tar_res.resn,distance(getattr(ref_res,atom_name).coord, getattr(tar_res,atom_name).coord)))
+    return plot_data
+
+def get_dihedral_coord(resi,atom_list):
+    vect = []
+    for atm in atom_list:
+        if hasattr(res, atm):
+           vect.append(getattr(res, atm))
+        else:
+           break
+    return vect
+
+def compute_phipsi(structure):
+    plot_data = []
+    for i in range(1,len(structure)-1): # same size
+        res_pre = structure[i-1]
+        res = structure[i]
+        res_nex = structure[i+1]
+        phi = dihedral(getattr(res_pre,'C').coord,getattr(res,'N').coord,getattr(res,'CA').coord,getattr(res,'C').coord)
+        psi = dihedral(getattr(res,'N').coord,getattr(res,'CA').coord,getattr(res,'C').coord,getattr(res_nex,'N').coord)
+        plot_data.append(Resi_plot(res.resi,res.resn,[phi,psi]))
+    return plot_data
+
+def read_pdb_data(pdb_name):
+    data = []
+    tmp_resi = None
+    res_count = -1
+    data_pdb = open('%s'%pdb_name,'r').readlines()
+    for line in data_pdb:
+        if line[:4] == 'ATOM':
+           line = line.split('\n')[0]
+           coord = [float(line[30:38]),float(line[38:46]),float(line[46:54])]
+           r_fact = float(line[60:66])
+           line = line.split()
+           resn = line[3]
+           resi = line[5]
+           aton = line[2]
+           if not resi == tmp_resi:
+              res_count += 1 
+	      data.append(Residue(resi,resn))
+              tmp_resi = resi
+              residue = data[res_count]
+           residue.add_atom(aton,coord,r_fact)          
+    return data
+
+def dihedral_diff(gr1,gr2):
+    data_phi = range(len(gr1))
+    data_psi = range(len(gr1))
+    for val in range(len(gr1)):
+        data_phi[val] = gr1[val][0] - gr2[val][0]
+        data_psi[val] = gr1[val][1] - gr2[val][1]
+    return data_phi, data_psi      
