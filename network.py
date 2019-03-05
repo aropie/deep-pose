@@ -11,22 +11,23 @@ import timeit
 
 rng = np.random.RandomState(1111)
 
+
 def add_zeros(sample):
     s = [len(i) for i in sample]
     v = max(s)
     z = [0, 0, 0, 0, 0]
-    f = 1
     for i in sample:
         if len(i) < v:
             try:
-                 np.array(i).shape
+                np.array(i).shape
             except ValueError:
-               print "ff"
-               print i
-               sys.exit()
+                print "ff"
+                print i
+                sys.exit()
             for j in range(v-len(i)):
                 i += [[z, z]]
     return np.array(sample, dtype="int32"), np.array(s, dtype="int32")
+
 
 print("Reading dataset")
 with open(sys.argv[1], "rb") as f:
@@ -175,9 +176,9 @@ class ConvLayer(object):
             conca5, up_5 = theano.scan(set_col_in_u,
                                        sequences=[pose[:branches_in_pose], length],
                                        outputs_info=U,
-                                       non_sequences=[self.W1, self.b1],
-                                       strict=True
-                            )
+                                       non_sequences=[self.W1.get_value(),
+                                                      self.b1.get_value()],
+                                       strict=True)
             final_result = conca5[-1]
             return tt.max(final_result, axis=1)
 
@@ -193,9 +194,10 @@ class ConvLayer(object):
 
 
 class DataTreatmentLayer(object):
-    """Data Treatment Layer. Take the input a plays around with it 
+    """Data Treatment Layer. Take the input a plays around with it
        to get it into shape."""
-    def __init__(self, rng, list_of_poses , cut_positions , hyper_neighbors, num_branch_dict):
+    def __init__(self, rng, list_of_poses, cut_positions,
+                 hyper_neighbors, num_branch_dict):
         self.list_of_poses = list_of_poses
         self.cut_positions = cut_positions
         W_bound = np.sqrt(6. / (hyper_neighbors*3))
@@ -206,51 +208,45 @@ class DataTreatmentLayer(object):
                                          size=(hyper_neighbors, num_branch_dict+1)),
                              dtype=theano.config.floatX
                            )
-        w_distance[:,0] = 0
+        w_distance[:, 0] = 0
         w_branch = np.asarray(
                              rng.uniform(low=-W_bound,
                                          high=W_bound,
                                          size=(hyper_neighbors, num_branch_dict+1)),
                              dtype=theano.config.floatX
                            )
-        w_branch[:,0] = 0
+        w_branch[:, 0] = 0
 
-        self.W_distance_bin = theano.shared(w_distance,borrow=True) 
-        self.W_branch_type= theano.shared(w_branch,borrow=True) 
-
+        self.W_distance_bin = theano.shared(w_distance, borrow=True)
+        self.W_branch_type = theano.shared(w_branch, borrow=True)
 
         self.params = [self.W_distance_bin, self.W_branch_type]
 
-        def pose_feature_vector(index,ps,side):
-           """ Make a single feature vector for each
-               in the list """
-           return ps[index][side]
-       
+        def pose_feature_vector(index, ps, side):
+            """ Make a single feature vector for each
+            in the list """
+            return ps[index][side]
+
         def get_pose(pose):
             conca0, up_0 = theano.scan(pose_feature_vector,
-                    sequences=[tt.arange(pose.shape[0])],
-                    outputs_info=None,
-                    non_sequences=[pose,0]
-                    )
+                                       sequences=[tt.arange(pose.shape[0])],
+                                       outputs_info=None,
+                                       non_sequences=[pose, 0])
             conca1, up_1 = theano.scan(pose_feature_vector,
-                    sequences=[tt.arange(pose.shape[0])],
-                    outputs_info=None,
-                    non_sequences=[pose,1]
-                    )
-            conca2, up_2 = theano.scan(fn=lambda col, wf : wf[:,tt.cast(col,'int32')].T,
-                    sequences=[conca0],
-                    outputs_info=None,
-                    non_sequences=[self.W_branch_type]
-                    )
-            conca3, up_3 = theano.scan(fn=lambda col, wf : wf[:,tt.cast(col,'int32')].T,
-                    sequences=[conca1],
-                    outputs_info=None,
-                    non_sequences=[self.W_distance_bin]
-                    )
-            conca4, up_4 = theano.scan(fn=lambda col1, col2: tt.concatenate([col1.flatten(1),col2.flatten(1)]),
-                    sequences=[conca2,conca3],
-                    outputs_info=None
-                    )
+                                       sequences=[tt.arange(pose.shape[0])],
+                                       outputs_info=None,
+                                       non_sequences=[pose, 1])
+            conca2, up_2 = theano.scan(fn=lambda col, wf: wf[:, tt.cast(col, 'int32')].T,
+                                       sequences=[conca0],
+                                       outputs_info=None,
+                                       non_sequences=[self.W_branch_type])
+            conca3, up_3 = theano.scan(fn=lambda col, wf: wf[:, tt.cast(col, 'int32')].T,
+                                       sequences=[conca1],
+                                       outputs_info=None,
+                                       non_sequences=[self.W_distance_bin])
+            conca4, up_4 = theano.scan(fn=lambda col1, col2: tt.concatenate([col1.flatten(1), col2.flatten(1)]),
+                                       sequences=[conca2, conca3],
+                                       outputs_info=None)
 
             return conca4
 
@@ -259,7 +255,6 @@ class DataTreatmentLayer(object):
                                     sequences=[list_of_poses],
                                     outputs_info=None)
 
-        # self.output = theano.function(inputs=[list_of_poses], outputs=initial)
         self.output = initial
 
     def t(self, ndx):
@@ -288,7 +283,8 @@ HIDDEN_2 = 20
 OUT = 2
 
 layer_0 = DataTreatmentLayer(rng, x, z, HYPER_NEIGHBORS, BRANCHES_IN_DICT)
-layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions, HYPER_NEIGHBORS * 10, HYPER_CF)
+layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions,
+                    HYPER_NEIGHBORS * 10, HYPER_CF)
 layer_2 = HiddenLayer(rng, layer_1.output, HYPER_CF, HIDDEN_1)
 layer_3 = HiddenLayer(rng, layer_2.output, HIDDEN_1, HIDDEN_2)
 layer_out = LogisticRegression(layer_3.output, HIDDEN_2, OUT)
@@ -375,7 +371,8 @@ while (epoch < n_epochs) and (not done_looping):
             if this_validation_loss < best_validation_loss:
 
                 # improve patience if loss improvement is good enough
-                if this_validation_loss < best_validation_loss * improvement_threshold:
+                if this_validation_loss < (best_validation_loss
+                                           * improvement_threshold):
                     patience = max(patience, iter * patience_increase)
 
                     # save best validation score and iteration number
