@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 import theano
+import os
 from theano import tensor as tt
-from theano import function
-import theano.typed_list as ttl
+from six.moves import cPickle
 import numpy as np
 import pickle as pkl
-import random
 import sys
 import timeit
 
@@ -260,6 +259,22 @@ class DataTreatmentLayer(object):
     def t(self, ndx):
         return self.list_of_poses[ndx]
 
+def save_model_good(layers, epoch):
+    if not os.path.exists("models"):
+        os.makedirs("models")
+    for idx, layer in enumerate(layers):
+        for param in layer.params:
+            filename = "models/epoch_{}_layer_{}_{}.pkl".format(
+                str(epoch), idx, param.name)
+            with open(filename, "wb") as f:
+                cPickle.dump(param.get_value(), f,
+                             protocol=cPickle.HIGHEST_PROTOCOL)
+
+
+def save_model_naive(model, epoch):
+    with open("epoch_{}_complete_model.pkl".format(epoch), "wb") as f:
+        cPickle.dump(model, f, protocol=cPickle.HIGHEST_PROTOCOL)
+
 
 batch_size = 50
 n_train_batches = train_set_x.get_value(borrow=True).shape[0]
@@ -288,6 +303,8 @@ layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions,
 layer_2 = HiddenLayer(rng, layer_1.output, HYPER_CF, HIDDEN_1)
 layer_3 = HiddenLayer(rng, layer_2.output, HIDDEN_1, HIDDEN_2)
 layer_out = LogisticRegression(layer_3.output, HIDDEN_2, OUT)
+
+layers = [layer_0, layer_1, layer_2, layer_3, layer_out]
 
 cost = layer_out.negative_log_likelihood(y)
 
@@ -366,7 +383,7 @@ while (epoch < n_epochs) and (not done_looping):
             print('epoch {}, minibatch {}/{}, validation error {} %'
                   .format(epoch, minibatch_index + 1, n_train_batches,
                           this_validation_loss * 100))
-
+            save_model_good(layers, epoch)
             # if we got the best validation score until now
             if this_validation_loss < best_validation_loss:
 
