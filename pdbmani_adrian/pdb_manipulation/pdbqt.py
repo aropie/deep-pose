@@ -10,7 +10,7 @@ class Branch(object):
         self.atoms = []
         self.close_branches = []
         self.smi = ""
-        
+
     def __str__(self):
         s = ""
         for a in self.atoms:
@@ -28,7 +28,7 @@ class Branch(object):
 
     def addAtom(self, atom):
         self.atoms.append(atom)
-        
+
     def getGeometricCenter(self):
         """
         Returns the coords of the Residue's geometric center.
@@ -44,7 +44,7 @@ class Branch(object):
 
     def getAtomCount(self):
         return len(self.atoms)
-            
+
     def getSmi(self):
         h = str(hash(self)) + ".pdbqt"
         with open(h, 'w') as f:
@@ -57,7 +57,7 @@ class Branch(object):
 
 
 class Pdbqt(rpt.Pdb):
-    
+
     def __init__(self, name, ligandName="", l_chain=""):
         rpt.Pdb.__init__(self, name, ligandName, l_chain)
         self.branches = []
@@ -69,21 +69,21 @@ class Pdbqt(rpt.Pdb):
                 if line[:4] == 'ATOM' or line[:6] == "HETATM":
                     (atom_number, name, res_name, chain, res_id, coords, occup, rfact, element, charge) = self.splitInfo(line)
                     atom = Atom(atom_number, name, res_name, chain, res_id, coords, occup, rfact, element, charge)
-                    
+
                     if line[:6] == "HETATM" and res_name != "HOH" and res_name != "CD":
                         atom.isHetatm = True
-                        
+
                     branch.addAtom(atom)
                     self.atoms.append(atom)
                 elif line[:6] == "BRANCH":
                     self.branches.append(branch)
                     branch.smi = branch.getSmi()
-                    branch = Branch() 
+                    branch = Branch()
 
             self.branches.append(branch)
             branch.smi = branch.getSmi()
-            
-                    
+
+
     def printInfo(self):
         print self.name
         print str(len(self.atoms)) + " atoms"
