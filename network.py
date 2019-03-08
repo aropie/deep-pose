@@ -175,8 +175,8 @@ class ConvLayer(object):
             conca5, up_5 = theano.scan(set_col_in_u,
                                        sequences=[pose[:branches_in_pose], length],
                                        outputs_info=U,
-                                       non_sequences=[self.W1.get_value(),
-                                                      self.b1.get_value()],
+                                       non_sequences=[self.W1,
+                                                      self.b1],
                                        strict=True)
             final_result = conca5[-1]
             return tt.max(final_result, axis=1)
