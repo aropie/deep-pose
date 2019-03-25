@@ -152,17 +152,18 @@ class ConvLayer(object):
         self.input = input_in_shape
         W_bound = np.sqrt(6. / (hyper_cf*3))
         self.W1 = theano.shared(
-                  np.asarray(
-                      rng.uniform(low=-W_bound,
-                                  high=W_bound,
-                                  size=(length_z, hyper_cf)),
-                      dtype=theano.config.floatX
-                  ),
-                  borrow=True
-               )
+            value=np.asarray(
+                rng.uniform(low=-W_bound,
+                            high=W_bound,
+                            size=(length_z, hyper_cf)),
+                dtype=theano.config.floatX
+            ),
+            name='W1',
+            borrow=True
+        )
 
         b_values = np.zeros((hyper_cf,), dtype=theano.config.floatX)
-        self.b1 = theano.shared(value=b_values, borrow=True)
+        self.b1 = theano.shared(value=b_values, name='b1', borrow=True)
 
         def set_col_in_u(branch, location, u, w, b):
             value = tt.tanh(tt.dot(branch, w)+b)
@@ -216,8 +217,10 @@ class DataTreatmentLayer(object):
                            )
         w_branch[:, 0] = 0
 
-        self.W_distance_bin = theano.shared(w_distance, borrow=True)
-        self.W_branch_type = theano.shared(w_branch, borrow=True)
+        self.W_distance_bin = theano.shared(value=w_distance,
+                                            name='W_distance_bin', borrow=True)
+        self.W_branch_type = theano.shared(value=w_branch,
+                                           name='W_branch_type', borrow=True)
 
         self.params = [self.W_distance_bin, self.W_branch_type]
 
@@ -258,6 +261,7 @@ class DataTreatmentLayer(object):
 
     def t(self, ndx):
         return self.list_of_poses[ndx]
+
 
 def save_model_good(layers, epoch):
     if not os.path.exists("models"):
