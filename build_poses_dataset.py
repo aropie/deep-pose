@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 import os
 
-WORK_DIR = "/home/marciniega/Things_Dock/Proyecto/clean_start"
+WORK_DIR = "/home/adrian/Proyecto"
 POSES_DIR = WORK_DIR+"/poses"
 OBJ_DIR = WORK_DIR+"/working_objects"
 
@@ -37,8 +37,9 @@ def create_pose_matrix(branch_dict, branches_file):
 
         pose = []
         rmsd, score = [float(x) for x in f.readline().split()]
-        f.readline().strip()
         branches = []
+        branch = f.readline().strip()
+        branches.append((0.0, branch))
         for line in f:
             if len(line.split(",")) <= 1:
                 if len(branches) == 0:
@@ -46,12 +47,15 @@ def create_pose_matrix(branch_dict, branches_file):
                     empty_signal_ds = encode_distances([6.0, 6.0, 6.0,
                                                         6.0, 6.0])
                     pose.append(np.array([empty_signal_br, empty_signal_ds]))
+
                 elif len(branches) >= 5:
                     sorted_branches = sorted(branches, key=lambda b: b[0])
                     close_distances, close_branches = zip(*sorted_branches[:5])
                     encoded_branches = encode_branches(close_branches, branch_dict)
                     encoded_distances = encode_distances(close_distances)
                     pose.append(np.array([encoded_branches, encoded_distances]))
+                branch = line.strip()
+                branches = [(0.0, branch)]
             else:
                 dist, branch = map(lambda x: x.strip(), line.split(","))
                 branches.append((float(dist), branch))
