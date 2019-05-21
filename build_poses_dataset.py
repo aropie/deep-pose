@@ -9,19 +9,12 @@ POSES_DIR = WORK_DIR+"/poses"
 OBJ_DIR = WORK_DIR+"/working_objects"
 
 
-def create_branch_dict(branches_file):
-    f = open(branches_file)
-    with open(branches_file, "rb") as f:
-        branch_dict = {}
-        index = 1
-        for branch_type in f:
-            branch_dict[branch_type.strip()] = index
-            index += 1
-    return branch_dict
-
-
 def encode_branches(branches, branch_dict):
-    encoded_branches = [branch_dict[br] for br in branches]
+    encoded_branches = []
+    for br in branches:
+        if br not in branch_dict:
+            branch_dict[br] = len(branch_dict) + 1
+        encoded_branches.append(branch_dict[br])
     return encoded_branches
 
 
@@ -32,7 +25,7 @@ def encode_distances(distances):
 
 
 def create_pose_matrix(branch_dict, branches_file):
-    m = max(branch_dict.values())+1
+    empty_branch_idx = branch_dict['empty_branch']
     with open(branches_file, "rb") as f:
 
         pose = []
@@ -43,7 +36,7 @@ def create_pose_matrix(branch_dict, branches_file):
         for line in f:
             if len(line.split(",")) <= 1:
                 if len(branches) == 0:
-                    empty_signal_br = [m for i in range(5)]
+                    empty_signal_br = [empty_branch_idx for i in range(5)]
                     empty_signal_ds = encode_distances([6.0, 6.0, 6.0,
                                                         6.0, 6.0])
                     pose.append(np.array([empty_signal_br, empty_signal_ds]))
@@ -116,14 +109,13 @@ def create_dataset(branch_dict, filename):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", help="Branch dictionary")
     parser.add_argument("-p", help="Poses file")
     args = parser.parse_args()
 
     dataset_txt = args.p
     basename = dataset_txt.split('/')[-1].split('.')[0]
 
-    branch_dict = create_branch_dict(args.d)
+    branch_dict = {'empty_branch': 1}
     dataset = create_dataset(branch_dict, dataset_txt)
 
     print("{} poses generated".format(len(dataset)))
