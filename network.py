@@ -300,20 +300,17 @@ def main(train=True):
     HYPER_NEIGHBORS = 80
     HYPER_CF = 150
     HIDDEN_1 = 50
-    HIDDEN_2 = 20
     OUT = 2
 
     layer_0 = DataTreatmentLayer(rng, x, z, HYPER_NEIGHBORS, BRANCHES_IN_DICT)
     layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions,
                         HYPER_NEIGHBORS * 10, HYPER_CF)
     layer_2 = HiddenLayer(rng, layer_1.output, HYPER_CF, HIDDEN_1)
-    layer_3 = HiddenLayer(rng, layer_2.output, HIDDEN_1, HIDDEN_2)
-    layer_out = LogisticRegression(layer_3.output, HIDDEN_2, OUT)
+    layer_out = LogisticRegression(layer_2.output, HIDDEN_1, OUT)
 
-    layers = [layer_0, layer_1, layer_2, layer_3, layer_out]
+    layers = [layer_0, layer_1, layer_2, layer_out]
 
     cost = layer_out.negative_log_likelihood(y)
-
 
     test_model = theano.function(
         [index],
@@ -335,7 +332,7 @@ def main(train=True):
         }
     )
 
-    params = layer_out.params + layer_3.params + layer_2.params + layer_1.params + layer_0.params
+    params = layer_out.params + layer_2.params + layer_1.params + layer_0.params
 
     grads = tt.grad(cost, params)
 
