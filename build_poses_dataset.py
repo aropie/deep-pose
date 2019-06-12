@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 import os
 
-WORK_DIR = "/home/adrian/Proyecto"
+WORK_DIR = "/home/adrian/resources"
 POSES_DIR = WORK_DIR+"/poses"
 OBJ_DIR = WORK_DIR+"/working_objects"
 
@@ -119,6 +119,7 @@ def main():
     dataset = create_dataset(branch_dict, dataset_txt)
 
     print("{} poses generated".format(len(dataset)))
+    print('{} different branches found in database'.format(len(branch_dict)))
     with open(OBJ_DIR + '/' + basename + ".pkl", "wb") as f:
         pickle.dump(dataset, f)
 
