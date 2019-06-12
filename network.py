@@ -241,7 +241,7 @@ def save_model_naive(model, epoch):
         cPickle.dump(model, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
 
-def main(train=True):
+def main(train=True, validate=True):
     print("Reading dataset")
     with open(sys.argv[1], "rb") as f:
         dataset = pkl.load(f)
@@ -332,6 +332,16 @@ def main(train=True):
         }
     )
 
+    score_model = theano.function(
+        [index],
+        layer_out.p_y_given_x(y),
+        givens={
+            x: valid_set_x[index],
+            y: valid_set_y[index],
+            z: s_v[index]
+        }
+    )
+
     params = layer_out.params + layer_2.params + layer_1.params + layer_0.params
 
     grads = tt.grad(cost, params)
@@ -416,6 +426,9 @@ def main(train=True):
         print('Optimization complete.')
         print('Best validation score of {} % obtained at iteration {}, with test performance {} %'
             .format(best_validation_loss * 100., best_iter + 1, test_score * 100.))
+    if validate:
+        for i in range(len(valid_set)):
+            print(score_model(i))
     print('The code ' + ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
     sys.exit()
