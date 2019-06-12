@@ -29,21 +29,20 @@ def add_zeros(sample):
 
 
 class LogisticRegression(object):
-    def __init__(self, input, n_in, n_out):
+    def __init__(self, input, n_in, n_out,
+                 w_value=None, b_value=None):
+        if w_value is None:
+            w_value = np.zeros((n_in, n_out), dtype=theano.config.floatX)
         self.W = theano.shared(
-            value=np.zeros(
-                (n_in, n_out),
-                dtype=theano.config.floatX
-            ),
+            value=w_value,
             name='W',
             borrow=True
         )
 
+        if b_value is None:
+            b_value = np.zeros((n_out,), dtype=theano.config.floatX)
         self.b = theano.shared(
-            value=np.zeros(
-                (n_out,),
-                dtype=theano.config.floatX
-            ),
+            value=b_value,
             name='b',
             borrow=True
         )
@@ -55,6 +54,9 @@ class LogisticRegression(object):
         self.params = [self.W, self.b]
 
         self.input = input
+
+    def score(self):
+        return self.p_y_given_x
 
     def negative_log_likelihood(self, y):
         return -tt.mean(tt.log(self.p_y_given_x)[tt.arange(y.shape[0]), y])
@@ -75,10 +77,10 @@ class LogisticRegression(object):
 
 
 class HiddenLayer(object):
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None,
-                 activation=tt.tanh):
-        if W is None:
-            W_values = np.asarray(
+    def __init__(self, rng, input, n_in, n_out, activation=tt.tanh,
+                 w_value=None, b_value=None):
+        if w_value is None:
+            w_value = np.asarray(
                 rng.uniform(
                     low=-np.sqrt(6. / (n_in + n_out)),
                     high=np.sqrt(6. / (n_in + n_out)),
@@ -87,16 +89,14 @@ class HiddenLayer(object):
                 dtype=theano.config.floatX
             )
             if activation == tt.nnet.sigmoid:
-                W_values *= 4
+                w_value *= 4
 
-            W = theano.shared(value=W_values, name='W', borrow=True)
+        self.W = theano.shared(value=w_value, name='W', borrow=True)
 
-        if b is None:
-            b_values = np.zeros((n_out,), dtype=theano.config.floatX)
-            b = theano.shared(value=b_values, name='b', borrow=True)
+        if b_value is None:
+            b_value = np.zeros((n_out,), dtype=theano.config.floatX)
+        self.b = theano.shared(value=b_value, name='b', borrow=True)
 
-        self.W = W
-        self.b = b
 
         lin_output = tt.dot(input, self.W) + self.b
         self.output = (
@@ -109,22 +109,26 @@ class HiddenLayer(object):
 
 class ConvLayer(object):
     """Convolutional Layer. """
-    def __init__(self, rng, input_in_shape, cut_pose, length_z, hyper_cf):
+    def __init__(self, rng, input_in_shape, cut_pose, length_z, hyper_cf,
+                 w1_value=None, b1_value=None):
         self.input = input_in_shape
         W_bound = np.sqrt(6. / (hyper_cf*3))
-        self.W1 = theano.shared(
-            value=np.asarray(
+        if w1_value is None:
+            w1_value = np.asarray(
                 rng.uniform(low=-W_bound,
                             high=W_bound,
                             size=(length_z, hyper_cf)),
                 dtype=theano.config.floatX
-            ),
+            )
+        self.W1 = theano.shared(
+            value=w1_value,
             name='W1',
             borrow=True
         )
 
-        b_values = np.zeros((hyper_cf,), dtype=theano.config.floatX)
-        self.b1 = theano.shared(value=b_values, name='b1', borrow=True)
+        if b1_value is None:
+            b1_value = np.zeros((hyper_cf,), dtype=theano.config.floatX)
+        self.b1 = theano.shared(value=b1_value, name='b1', borrow=True)
 
         def set_col_in_u(branch, location, u, w, b):
             value = tt.tanh(tt.dot(branch, w)+b)
@@ -158,29 +162,32 @@ class DataTreatmentLayer(object):
     """Data Treatment Layer. Take the input a plays around with it
        to get it into shape."""
     def __init__(self, rng, list_of_poses, cut_positions,
-                 hyper_neighbors, num_branch_dict):
+                 hyper_neighbors, num_branch_dict,
+                 w_dist_value=None, w_branch_value=None):
         self.list_of_poses = list_of_poses
         self.cut_positions = cut_positions
         W_bound = np.sqrt(6. / (hyper_neighbors*3))
 
-        w_distance = np.asarray(
-                             rng.uniform(low=-W_bound,
-                                         high=W_bound,
-                                         size=(hyper_neighbors, num_branch_dict+1)),
-                             dtype=theano.config.floatX
-                           )
-        w_distance[:, 0] = 0
-        w_branch = np.asarray(
-                             rng.uniform(low=-W_bound,
-                                         high=W_bound,
-                                         size=(hyper_neighbors, num_branch_dict+1)),
-                             dtype=theano.config.floatX
-                           )
-        w_branch[:, 0] = 0
+        if w_dist_value is None:
+            w_dist_value = np.asarray(
+                                rng.uniform(low=-W_bound,
+                                            high=W_bound,
+                                            size=(hyper_neighbors, num_branch_dict+1)),
+                                dtype=theano.config.floatX
+                            )
+            w_dist_value[:, 0] = 0
+        if w_branch_value is None:
+            w_branch_value = np.asarray(
+                                rng.uniform(low=-W_bound,
+                                            high=W_bound,
+                                            size=(hyper_neighbors, num_branch_dict+1)),
+                                dtype=theano.config.floatX
+                            )
+            w_branch_value[:, 0] = 0
 
-        self.W_distance_bin = theano.shared(value=w_distance,
+        self.W_distance_bin = theano.shared(value=w_dist_value,
                                             name='W_distance_bin', borrow=True)
-        self.W_branch_type = theano.shared(value=w_branch,
+        self.W_branch_type = theano.shared(value=w_branch_value,
                                            name='W_branch_type', borrow=True)
 
         self.params = [self.W_distance_bin, self.W_branch_type]
@@ -241,7 +248,7 @@ def save_model_naive(model, epoch):
         cPickle.dump(model, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
 
-def main(train=True, validate=True):
+def main(train=True, validate=True, use_existing_model=False):
     print("Reading dataset")
     with open(sys.argv[1], "rb") as f:
         dataset = pkl.load(f)
@@ -302,11 +309,46 @@ def main(train=True, validate=True):
     HIDDEN_1 = 50
     OUT = 2
 
-    layer_0 = DataTreatmentLayer(rng, x, z, HYPER_NEIGHBORS, BRANCHES_IN_DICT)
-    layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions,
-                        HYPER_NEIGHBORS * 10, HYPER_CF)
-    layer_2 = HiddenLayer(rng, layer_1.output, HYPER_CF, HIDDEN_1)
-    layer_out = LogisticRegression(layer_2.output, HIDDEN_1, OUT)
+    if use_existing_model:
+        model_dir = 'models/'
+
+        w_branch_value = None
+        w_dist_value = None
+        with open(model_dir+'layer_0_W_branch_type.pkl', 'rb') as br, open(model_dir+'layer_0_W_distance_bin.pkl', 'rb') as d:
+            w_branch_value = pkl.load(br)
+            w_dist_value = pkl.load(d)
+        layer_0 = DataTreatmentLayer(rng, x, z, HYPER_NEIGHBORS, BRANCHES_IN_DICT, w_dist_value, w_branch_value)
+
+        w1_value = None
+        b1_value = None
+        with open(model_dir+'layer_1_W1.pkl', 'rb') as w1, open(model_dir+'layer_1_b1.pkl', 'rb') as b1:
+            w1_value = pkl.load(w1)
+            b1_value = pkl.load(b1)
+        layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions,
+                            HYPER_NEIGHBORS * 10, HYPER_CF,
+                            w1_value, b1_value)
+
+        w_value = None
+        b_value = None
+        with open(model_dir+'layer_2_b.pkl', 'rb') as b, open(model_dir+'layer_2_W.pkl', 'rb') as w:
+            w_value = pkl.load(w)
+            b_value = pkl.load(b)
+        layer_2 = HiddenLayer(rng, layer_1.output, HYPER_CF, HIDDEN_1,
+                              w_value=w_value, b_value=b_value)
+
+        w_value = None
+        b_value = None
+        with open(model_dir+'layer_3_b.pkl', 'rb') as b, open(model_dir+'layer_3_W.pkl', 'rb') as w:
+            w_value = pkl.load(w)
+            b_value = pkl.load(b)
+        layer_out = LogisticRegression(layer_2.output, HIDDEN_1, OUT, w_value, b_value)
+    else:
+        layer_0 = DataTreatmentLayer(rng, x, z, HYPER_NEIGHBORS, BRANCHES_IN_DICT)
+        layer_1 = ConvLayer(rng, layer_0.output, layer_0.cut_positions,
+                            HYPER_NEIGHBORS * 10, HYPER_CF)
+        layer_2 = HiddenLayer(rng, layer_1.output, HYPER_CF, HIDDEN_1)
+        layer_out = LogisticRegression(layer_2.output, HIDDEN_1, OUT)
+
 
     layers = [layer_0, layer_1, layer_2, layer_out]
 
@@ -333,14 +375,14 @@ def main(train=True, validate=True):
     )
 
     score_model = theano.function(
-        [index],
-        layer_out.p_y_given_x(y),
+        [],
+        layer_out.score(),
         givens={
-            x: valid_set_x[index],
-            y: valid_set_y[index],
-            z: s_v[index]
-        }
-    )
+            x: valid_set_x,
+            y: valid_set_y,
+            z: s_v
+        },
+        on_unused_input='warn')
 
     params = layer_out.params + layer_2.params + layer_1.params + layer_0.params
 
@@ -422,17 +464,17 @@ def main(train=True, validate=True):
                     done_looping = True
                     break
 
-        end_time = timeit.default_timer()
         print('Optimization complete.')
         print('Best validation score of {} % obtained at iteration {}, with test performance {} %'
             .format(best_validation_loss * 100., best_iter + 1, test_score * 100.))
     if validate:
-        for i in range(len(valid_set)):
-            print(score_model(i))
+        for idx, probs in enumerate(score_model()):
+            print(probs[0], probs[1], valid_set[idx][1])
+    end_time = timeit.default_timer()
     print('The code ' + ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
     sys.exit()
 
 
 if __name__ == '__main__':
-    main()
+    main(use_existing_model=True, train=False)
